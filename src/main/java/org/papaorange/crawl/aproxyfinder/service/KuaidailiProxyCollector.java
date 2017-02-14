@@ -32,12 +32,11 @@ public class KuaidailiProxyCollector
 
 	    try
 	    {
-		System.out.println(connection.timeout(10000).get());
+		connection.timeout(10000).get();
 		synchronized (toValidate)
 		{
 		    validProxies.add(toValidate);
 		}
-		log.debug("代理可用,保留:" + toValidate.getIp() + ":" + toValidate.getPort());
 	    }
 	    catch (IOException e)
 	    {
@@ -130,7 +129,6 @@ public class KuaidailiProxyCollector
 		if (text.contains("透明"))
 		{
 		    // 透明代理直接忽略
-		    log.debug("透明代理忽略...");
 		    continue;
 		}
 		if (text.contains("高"))
@@ -187,11 +185,10 @@ public class KuaidailiProxyCollector
 	    }
 	    try
 	    {
-		Thread.sleep(1);
+		Thread.sleep(10);
 	    }
 	    catch (InterruptedException e)
 	    {
-		// TODO Auto-generated catch block
 		e.printStackTrace();
 	    }
 	}
