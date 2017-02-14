@@ -4,16 +4,81 @@ import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 
+import org.jsoup.Connection;
+import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
 import org.papaorange.crawl.aproxyfinder.model.FreeProxy;
 import org.papaorange.crawl.aproxyfinder.utils.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class KuaidailiProxyCollector
 {
+
+    class ProxyValidator extends Thread
+    {
+	// 从待验证队列中取出一个代理,如果验证ok,则保留代理列表,否则从列表中删除
+	private void ValidateProxy()
+	{
+	    FreeProxy toValidate = null;
+	    synchronized (this)
+	    {
+		toValidate = freeProxies.remove();
+		log.debug("剩余未验证数量:" + freeProxies.size());
+	    }
+
+	    Connection connection = Jsoup.connect("http://www.baidu.com").proxy(toValidate.getIp(), Integer.parseInt(toValidate.getPort()));
+
+	    try
+	    {
+		System.out.println(connection.timeout(10000).get());
+		synchronized (toValidate)
+		{
+		    validProxies.add(toValidate);
+		}
+		log.debug("代理可用,保留:" + toValidate.getIp() + ":" + toValidate.getPort());
+	    }
+	    catch (IOException e)
+	    {
+		synchronized (this)
+		{
+		    freeProxies.remove(toValidate);
+		    log.debug("代理失效,删除:" + toValidate.getIp() + ":" + toValidate.getPort());
+		}
+	    }
+	}
+
+	@Override
+	public void run()
+	{
+	    while (true)
+	    {
+		synchronized (freeProxies)
+		{
+		    if (freeProxies.isEmpty())
+		    {
+			synchronized (threadCount)
+			{
+			    threadCount--;
+			}
+			break;
+		    }
+		}
+		ValidateProxy();
+	    }
+	}
+    }
+
+    private final static Logger log = LoggerFactory.getLogger(KuaidailiProxyCollector.class);
+
     private static String baseUrl = "http://www.kuaidaili.com/proxylist/";
 
-    private static List<FreeProxy> freeProxies = new LinkedList<>();
+    private static LinkedList<FreeProxy> freeProxies = new LinkedList<>();
+
+    private static LinkedList<FreeProxy> validProxies = new LinkedList<>();
+
+    private static Integer threadCount = 100;
 
     private static Document loadDocFromUrl(String url)
     {
@@ -65,6 +130,7 @@ public class KuaidailiProxyCollector
 		if (text.contains("透明"))
 		{
 		    // 透明代理直接忽略
+		    log.debug("透明代理忽略...");
 		    continue;
 		}
 		if (text.contains("高"))
@@ -98,20 +164,57 @@ public class KuaidailiProxyCollector
 	}
     }
 
-    public static List<FreeProxy> getAllProxies()
+    public static void validate()
+    {
+	for (int i = 0; i < 100; i++)
+	{
+	    ProxyValidator validator = new KuaidailiProxyCollector().new ProxyValidator();
+	    Thread thread = new Thread(validator);
+	    thread.start();
+	}
+    }
+
+    public static void waitForValidationComplete()
+    {
+	while (true)
+	{
+	    synchronized (threadCount)
+	    {
+		if (threadCount == 0)
+		{
+		    break;
+		}
+	    }
+	    try
+	    {
+		Thread.sleep(1);
+	    }
+	    catch (InterruptedException e)
+	    {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+	    }
+	}
+    }
+
+    public static LinkedList<FreeProxy> getAllProxies()
     {
 	return freeProxies;
     }
 
+    public static LinkedList<FreeProxy> getAllValidProxies()
+    {
+	return validProxies;
+    }
+
     public static void main(String[] args)
     {
-
 	refresh();
-	List<FreeProxy> freeProxies = getAllProxies();
-
-	for (FreeProxy freeProxy : freeProxies)
+	validate();
+	waitForValidationComplete();
+	for (FreeProxy proxy : getAllValidProxies())
 	{
-	    System.out.println(freeProxy.getIp() + ":" + freeProxy.getPort() + ":" + freeProxy.getLocation());
+	    System.out.println(proxy.getIp() + ":" + proxy.getPort() + ":" + proxy.getLocation());
 	}
     }
 }
