@@ -1,14 +1,18 @@
 package org.papaorange.crawl.aproxyfinder.service;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
 import org.papaorange.crawl.aproxyfinder.model.FreeProxy;
+import org.papaorange.crawl.aproxyfinder.utils.DBAgent;
+import org.papaorange.crawl.aproxyfinder.utils.DBMgr;
 import org.papaorange.crawl.aproxyfinder.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +32,7 @@ public class KuaidailiProxyCollector
 		log.debug("剩余未验证数量:" + freeProxies.size());
 	    }
 
-	    Connection connection = Jsoup.connect("http://www.baidu.com").proxy(toValidate.getIp(), Integer.parseInt(toValidate.getPort()));
+	    Connection connection = Jsoup.connect("http://www.douban.com").proxy(toValidate.getIp(), Integer.parseInt(toValidate.getPort()));
 
 	    try
 	    {
@@ -206,12 +210,22 @@ public class KuaidailiProxyCollector
 
     public static void main(String[] args)
     {
+	DBAgent agent = DBMgr.getDBAgent();
+
 	refresh();
 	validate();
 	waitForValidationComplete();
+	agent.drop("valid");
 	for (FreeProxy proxy : getAllValidProxies())
 	{
+	    Map<String, Object> proxiesMap = new HashMap<>();
+	    proxiesMap.put("proxy", proxy.getIp() + ":" + proxy.getPort());
+	    proxiesMap.put("location", proxy.getLocation());
+	    proxiesMap.put("ssl", proxy.isSupportSSL());
+	    proxiesMap.put("HighAnonymous", proxy.isHighAnonymous());
+	    agent.addOneDocument(proxiesMap, "valid");
 	    System.out.println(proxy.getIp() + ":" + proxy.getPort() + ":" + proxy.getLocation());
 	}
+
     }
 }
